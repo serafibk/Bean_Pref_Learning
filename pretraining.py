@@ -1,120 +1,141 @@
 import numpy as np
 import os
 import json
-import requests
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-import time
-from decimal import Decimal
 
-def getCoords(roughcoords):
-    lat=''
-    long=''
-    readingLat=False
-    readingLong=False
-    for c in roughcoords:
-        if c=="," and readingLong:
-            readingLong=False
-        if c=="," and readingLat:
-            readingLat=False
-            readingLong=True
-        if readingLat:
-            lat=lat+c
-        if readingLong:
-            long=long+c
-        if c == '@':
-            readingLat=True
-    return Decimal(lat),Decimal(long[1:])
 root = r"/Users/serafinakamp/Desktop/Bean_Pref_Learning/roasting_dnn"
-url = "https://www.google.com/maps/"
-header = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36"}
+beanfile = os.path.join(root,"bean_data","BEANSFINAL0.json")
+
+#basically precluster the beans naively (each parameter has equal weight)
+#bean profile = ([lat,long],agtron,aroma,acidty,body,flavor,aftertaste,withmilk,price)
+
+class coffee_tree_bean:
+    def __init__(self, value):
+        self.value = value
+        self.left_bean = None
+        self.right_bean = None
+        self.height = 1
+
+class coffee_tree:
+    def __init__(self):
+        self.root = None
+        self.count = 0
+
+    def get_height(bean):
+        if bean == None:
+            return 0
+        if bean.left_bean == None and bean.right_bean == None:
+            return  1
+        if bean.left_bean == None:
+            return 1 + get_height(bean.right_bean)
+        if bean.right_bean == None:
+            return 1 + get_height(bean.left_bean)
+        return 1 + max(get_height(bean.left_bean),get_height(bean.right_bean))
+
+    def add_bean(root,val):
+        if root == None:
+            return coffee_tree_bean(value)
+        if val >= root.value:
+            root.right_bean = add_bean(root.right_bean,val)
+            root.height = get_height(root)
+            if abs(calc_balance(root)) > 1:
+                rebalance(root)
+
+        if val < root.value:
+            root.left_bean = add_bean(root.left_bean,val)
+            root.height = get_height(root)
+            if abs(calc_balance(root)) > 1:
+                rebalance(root)
+
+    def rotate_right(root):
+        temp_bean = root.left_bean
+        root.left_bean = temp_bean.right_bean
+        temp_bean.right_bean = root
+        return temp_bean
+
+    def rotate_left(root):
+        temp_bean = root.right_bean
+        root.right_bean = temp_bean.left_bean
+        temp_bean.left_bean = root
+        return temp_bean
+
+    def rebalance(root):
+        bal = calc_balance(root)
+
+        if bal > 1:
+            if calc_balance(root.right_bean) < 0:
+                root.right_bean = rotate_right(root.right_bean)
+            root = rotate_left(root)
+        if bal < 1:
+            if calc_balance(root.left_bean) > 0:
+                root.left_bean = rotate_left(root.left_bean)
+            root = rotate_right(root)
+
+    def calc_balance(root):
+        return get_height(root.right_bean-root.left_bean)
+
+    def get_root():
+        return self.root
 
 
-#converting json data stored in strings to json data with following format
-#[(origin lat,origin long),agtron normalized,aroma N, acidity N, body N, flavor N, aftertaste N, w milk N]
-#if any of the latter attributes are not available, set to -1 and we will figure out a way to normalize later
 
-counter = 0
-beanfilename = "BEANSFINAL"+str(counter)+".json"
+def bean_profile(bean):
+    attributes = 0
+    profile = 0
+
+    #origin
+    origin_normed = (bean["Origin"][0]+bean["Origin"][1])/2
+    profile=profile+origin_normed
+    attributes=attributes+1
+
+    #Agtron
+    profile=profile+bean["Agtron"]
+    attributes=attributes+1
+
+    #Aroma
+    if bean["Aroma"] != -1:
+        profile=profile+1
+        attributes=attributes+1
+
+    #aciditiy
+    if bean["Acidity"] != -1:
+        profile=profile+bean["Acidity"]
+        attributes=attributes+1
+
+    #Body
+    if bean["Body"] != -1:
+        profile=profile+bean["Body"]
+        attributes=attributes+1
+
+    #Flavor
+    if bean["Flavor"] != -1:
+        profile=profile+bean["Flavor"]
+        attributes=attributes+1
+
+    #Aftertaste
+    if bean["Aftertaste"] != -1:
+        profile=profile+bean["Aftertaste"]
+        attributes=attributes+1
+
+    #WithMilk
+    if bean["WithMilk"] != -1:
+        profile=profile+bean["WithMilk"]
+        attributes=attributes+1
+
+    profile = profile/attributes
+    return profile
+
+def classify_bean(bean, coffee_trees):
+    if len(coffee_trees) == 0:
+        coffee_tree = [bean]
+        coffee_trees.append(coffee_tree)
+        return
+    beanProf = bean_profile(bean)
+    for coffee_tree in coffee_trees:
+        #assume bean at position 0 is average for tree (maybe try to implement avl tree for this)
 
 
-while(1):
-    try:
-        print("working on file ", counter+1," of 27")
 
-        #open bean file to start processing
-        with open(beanfilename,"r") as f:
-            beans = json.load(f)
-        newbeans=[]
+USER_WEIGHT_PROFILE = [1,1,1,1,1,1,1,1]
+USER_BIAS_PROFILE = [0,0,0,0,0,0,0,0]
 
-        #do stuff with beans
-        for beannum,bean in enumerate(beans):
-            #set up search object
-            driver = webdriver.Safari()
-            driver.get(url)
-            search = driver.find_element_by_xpath("//input[@id='searchboxinput']")
-            
-            print("origin: ",bean["Origin"]," at position ", beannum)
-            #handling origin - normalized
-            search.send_keys(bean["Origin"],Keys.RETURN)
-            time.sleep(5)
-            lat,long = getCoords(str(driver.current_url))
-            origin = (float(lat)/90.0,float(long)/180.0)
-            bean["Origin"] = origin
-
-            #handling agtron - normalized
-            agtron = bean["Agtron"]
-            num = ''
-            denom=''
-            NUM=True
-            DEN=False
-            for c in agtron:
-                if DEN:
-                    denom=denom+c
-                if c=='/':
-                    NUM=False
-                    DEN=True
-                if NUM:
-                    num=num+c
-            bean["Agtron"] = float(int(num)/int(denom))
-
-            #handling taste palate - normalized
-            if bean["Aroma"] != '':
-                bean["Aroma"] = float(int(bean["Aroma"])/10)
-            else:
-                bean["Aroma"] = -1
-            if bean["Acidity"] != '':
-                bean["Acidity"] = float(int(bean["Acidity"])/10)
-            else:
-                bean["Acidity"] = -1
-            if bean["Body"] != '':
-                bean["Body"] = float(int(bean["Body"])/10)
-            else:
-                bean["Body"] = -1
-            if bean["Flavor"] != '':
-                bean["Flavor"] = float(int(bean["Flavor"])/10)
-            else:
-                bean["Flavor"]=-1
-            if bean["Aftertaste"] != '':
-                bean["Aftertaste"] = float(int(bean["Aftertaste"])/10)
-            else:
-                bean["Aftertaste"] = -1
-            if bean["WithMilk"] != '':
-                bean["WithMilk"] = float(int(bean["WithMilk"])/10)
-            else:
-                bean["WithMilk"] = -1
-
-            #don't change price - wont be part of bean profile
-            newbeans.append(bean)
-            driver.quit()
-
-        filename = "BEANSFINAL"+str(counter)+".json"
-        with open(filename,"w",encoding="utf-8") as out:
-            json.dump(newbeans,out,ensure_ascii=False)
-        counter=counter+1
-        break
-    except:
-        print("done w preprocessing")
-        break
+epsilon = 0.1 #maybe change or have it learn somehow
