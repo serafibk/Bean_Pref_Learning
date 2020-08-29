@@ -12,9 +12,9 @@ from decimal import Decimal
 root = r"/Users/serafinakamp/Desktop/Bean_Pref_Learning/roasting_dnn"
 counter = 0
 
-while(1):
-    filename = "BEANS"+str(counter)+".json"
-    print("working on file ", counter+1, " of 28")
+while(0):
+    filename = "BEANS_ACTUAL"+str(counter)+".json"
+    print("working on file ", counter+1, " of 22")
     newbeans = []
     try:
         with open(os.path.join(root,filename),"r") as f:
@@ -29,10 +29,14 @@ while(1):
                 "Flavor":"",
                 "Aftertaste":"",
                 "WithMilk":"",
-                "Price":""
+                "Price":"",
+                "Origin_String":"",
+                "Name":"",
+                "Review":""
             }
             if "Coffee Origin" in bean:
                 newbean["Origin"] = bean["Coffee Origin"]
+                newbean["Origin_String"] = bean["Coffee Origin"]
             if "Agtron" in bean:
                 newbean["Agtron"] = bean["Agtron"]
             if "Aroma" in bean:
@@ -53,14 +57,19 @@ while(1):
                 newbean["WithMilk"] = bean["With Milk"][0]
             if "Est. Price" in bean:
                 newbean["Price"] = bean["Est. Price"]
+            if "Name" in bean:
+                newbean["Name"] = bean["Name"]
+            if "Review" in bean:
+                newbean["Review"] = bean["Review"]
             newbeans.append(newbean)
-        filename = "BEANSFINAL"+str(counter)+".json"
+        filename = "BEANSFINAL_ACTUAL"+str(counter)+".json"
         with open(filename,"w",encoding="utf-8") as out:
             json.dump(newbeans,out,ensure_ascii=False)
         counter=counter+1
     except:
         print("done processing beans")
-        break
+        #break
+
 
 
 def getCoords(roughcoords):
@@ -91,12 +100,12 @@ header = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWe
 #if any of the latter attributes are not available, set to -1 and we will figure out a way to normalize later
 
 counter = 0
-beanfilename = "BEANSFINAL"+str(counter)+".json"
+beanfilename = "BEANSFINAL_ACTUAL"+str(counter)+".json"
 
 
 while(1):
     try:
-        print("working on file ", counter+1," of 27")
+        print("working on file ", counter+1," of 22")
 
         #open bean file to start processing
         with open(beanfilename,"r") as f:
@@ -105,6 +114,7 @@ while(1):
 
         #do stuff with beans
         for beannum,bean in enumerate(beans):
+            print("bean ", str(beannum+1)," of ", str(len(beans)))
             #set up search object
             driver = webdriver.Safari()
             driver.get(url)
@@ -119,20 +129,23 @@ while(1):
             bean["Origin"] = origin
 
             #handling agtron - normalized
-            agtron = bean["Agtron"]
-            num = ''
-            denom=''
-            NUM=True
-            DEN=False
-            for c in agtron:
-                if DEN:
-                    denom=denom+c
-                if c=='/':
-                    NUM=False
-                    DEN=True
-                if NUM:
-                    num=num+c
-            bean["Agtron"] = float(int(num)/int(denom))
+            if bean["Agtron"] != '' and bean["Agtron"]!='0/0':
+                agtron = bean["Agtron"]
+                num = ''
+                denom=''
+                NUM=True
+                DEN=False
+                for c in agtron:
+                    if DEN:
+                        denom=denom+c
+                    if c=='/':
+                        NUM=False
+                        DEN=True
+                    if NUM:
+                        num=num+c
+                bean["Agtron"] = float(int(num)/int(denom))
+            else:
+                bean["Agtron"] = -1
 
             #handling taste palate - normalized
             if bean["Aroma"] != '':
@@ -164,11 +177,10 @@ while(1):
             newbeans.append(bean)
             driver.quit()
 
-        filename = "BEANSFINAL"+str(counter)+".json"
+        filename = "BEANSNORM_ACTUAL"+str(counter)+".json"
         with open(filename,"w",encoding="utf-8") as out:
             json.dump(newbeans,out,ensure_ascii=False)
         counter=counter+1
-        break
-    except:
-        print("done w preprocessing")
+    except Exception as e:
+        print("done w preprocessing",e)
         break
