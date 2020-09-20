@@ -11,7 +11,7 @@ beanfile = os.path.join(root,"bean_data_actual","BEANSNORM_ACTUAL0.json")
 #basically precluster the beans naively (each parameter has equal weight)
 #bean profile = ([lat,long],agtron,aroma,acidty,body,flavor,aftertaste,withmilk,price)
 
-##AVL TREE IMPLEMENTATION
+##AVL TREE IMPLEMENTATION - using decision trees instead
 class coffee_tree_bean:
     def __init__(self, value):
         self.value = value #bean profile
@@ -103,8 +103,9 @@ class coffee_tree:
 
 ##DECISION TREE IMPLEMENTATION
 class decisive_coffee_bean:
-    def __init__(self, value=0):
+    def __init__(self, value=0,attrib=0):
         self.split_value = value
+        self.split_attrib = attrib
         self.left_beans = None
         self.right_beans = None
 
@@ -176,25 +177,42 @@ class decisive_coffee_tree:
                 gini = self.gini_ind(bean_groups)
                 #print('A%d <= %.3f Gini=%.3f' % ((a), bean[a], gini))
                 if gini < best_gini:
-                    print("best: ", gini)
                     best_gini = gini
                     best_groups = bean_groups
                     split_attrib = a
                     split_val = bean[a]
         return {'index':split_attrib,'value':split_val,'gini':best_gini,'groups':best_groups}
 
+    def get_majority_class(self,beans):
+        total = len(beans)
+        if total == 0:
+            return 0
+        if sum([bean[-1] for bean in beans])/total >=0.5:
+            return 1
+        else:
+            return 0
+
     def update_node_values(self,root,all_beans):
         #if last node - should only have one attribute left
         if not root.left_beans and not root.right_beans:
             split = self.split_beans(all_beans)
             root.split_value = split["value"]#set value to split by
-            print("final split value", root.split_value)
-            print("final feature, ",split["index"])
+            root.split_attrib = split["index"]
+
+            ##set left and right to be majority class of each split group
+            root.left_beans = self.get_majority_class(split["groups"][0])
+            root.right_beans = self.get_majority_class(split["groups"][1])
+
+            #print("final split value", root.split_value)
+            #print("final feature, ",split["index"])
             print("END SPLIT: ",split["groups"])
+            print("class left: ", root.left_beans)
+            print("class right: ", root.right_beans)
         else: #otherwise split and update split val of current node
             split = self.split_beans(all_beans)
             root.split_value = split["value"]
-            print("split feature, ", split["index"])
+            root.split_attrib = split["index"]
+            #print("split feature, ", split["index"])
             if not split["groups"]:
                 return
             left,right = split["groups"]
@@ -209,15 +227,15 @@ class decisive_coffee_tree:
         print_nodes.append(self.root)
         while(len(print_nodes)>0):
             next = print_nodes[0]
-            if next.left_beans:
-                print_nodes.append(next.left_beans)
-            if next.right_beans:
-                print_nodes.append(next.right_beans)
-            print(next.split_value)
+            if not next == 1 and not next == 0:
+                if next.left_beans:
+                    print_nodes.append(next.left_beans)
+                if next.right_beans:
+                    print_nodes.append(next.right_beans)
+                print("feature: ",next.split_attrib," val: ",next.split_value)
+            else:
+                print("class: ", next)
             del print_nodes[0]
-
-
-
 
 
 
@@ -400,10 +418,10 @@ for i,bean in enumerate(beandata[:10]):
 
 
 tree = decisive_coffee_tree([0,1,2,3])
-split = tree.split_beans(BEAN_DATA)
-print("A",split["index"]," <= ", split["value"], "Gini: ", split["gini"])
-tree.update_node_values(tree.root,BEAN_DATA)
-tree.print_vals()
+#split = tree.split_beans(BEAN_DATA)
+#print("A",split["index"]," <= ", split["value"], "Gini: ", split["gini"])
+tree.update_node_values(tree.root,BEAN_DATA) #create the decision tree weights based on training data
+tree.print_vals() # see the weights
 exit()
 
 '''
