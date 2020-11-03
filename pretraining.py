@@ -237,10 +237,61 @@ class decisive_coffee_tree:
                 print("class: ", next)
             del print_nodes[0]
 
+#ADABOOST implementation - using simple h(x,theta) = sign(theta_1(x_k-theta_0)) for theta = [k,theta_0,theta_1]
+class ADABeans:
+    def __init__(self,num_clf,num_train):
+        self.clfs = num_clf #number of classifiers
+        self.N = num_train #number of training examples
+        self.W = [[1/self.N for i in range(self.N)]] #train weights for first clf is 1/N
+        self.thetas = [[i,0,1] for i in range(self.clfs)] #i represents attributes (assumes n_clfs = num dim of X(attributes))
+        self.alphas = []#initialize list of alphas (final weights of each classifier)
+
+    #not quite brute force method to find theta
+    def get_opt_theta(self, m, X, y, lower, upper, step): #use quartiles 
+        best_t0 = lower
+        best_acc = 0 #(1-eps)
+        label = 1
+        if lower == upper:
+            return[m,best_t0,1],0.5
+        for t0 in np.arange(lower,upper,step):
+            if m == 4:
+                print("ACIDITY: ",X[i][m])
+            eps = sum([self.W[m][i]*int(np.sign(y[i])!=np.sign(X[i][m]-t0)) for i in range(self.N)])
+            if 1-eps > best_acc:
+                best_t0 = t0
+                best_acc = 1-eps
+                label = np.sign(sum([np.sign(X[i][m]-t0) for i in range(self.N)])) #update label of majority class
+
+        return [m,best_t0,label],1-best_acc #return theta and epsilon
+
+    def train_classifiers(self,X,y):
+        #train each classifier
+        for m in range(self.clfs):
+            lower_t = np.min(X,axis=0)[m]
+            upper_t = np.max(X,axis=0)[m]
+            self.thetas[m],eps = self.get_opt_theta(m,X,y,lower_t,upper_t,(upper_t-lower_t)/self.N)
+            if eps == 0:
+                alph = 0.5*np.log(1)
+            else:
+                alph = 0.5*np.log((1-eps)/eps)
+            self.alphas.append(alph)#add to final clf weights
+
+            #update weights for next round
+            w = []
+            for i in range(self.N):
+                t0 = self.thetas[m][1]
+                t1 = self.thetas[m][2]
+                w.append(self.W[m][i]*np.exp(-y[i]*alph*np.sign(t1*(X[i][m]-t0))))
+            self.W.append([(1/sum(w))*w[i] for i in range(len(w))])
+        return self.thetas,self.alphas
+
+    def predict(self, new_bean):
+        return np.sign(sum([self.alphas[m]*np.sign(self.thetas[m][2]*(new_bean[m]-self.thetas[m][1])) for m in range(self.clfs)]))
 
 
 
 
+# naive attempt helper functions
 def bean_profile(bean,USER_WEIGHT_PROFILE,USER_BIAS_PROFILE):
     attributes = 0
     profile = 0
@@ -331,52 +382,134 @@ def shuffle_beans(beandata):
 
 
 
+
 ##START CLASSIFYING (this is k means should I try many iterations?)
+if __name__ == "__main__":
 
-USER_WEIGHT_PROFILE = [1,1,1,1,1,1,1,1,1]
-USER_BIAS_PROFILE = [0,0,0,0,0,0,0,0,0]
+    USER_WEIGHT_PROFILE = [1,1,1,1,1,1,1,1,1]
+    USER_BIAS_PROFILE = [0,0,0,0,0,0,0,0,0]
 
-#track the kind of bean the user prefers
-average_bean = [0,0,0,0,0,0,0,0,0]
+    #track the kind of bean the user prefers
+    average_bean = [0,0,0,0,0,0,0,0,0]
 
-epsilon = 0.01 #maybe change or have it learn somehow, let's learn epsilon
+    epsilon = 0.01 #maybe change or have it learn somehow, let's learn epsilon
 
-coffee_trees=[]
+    coffee_trees=[]
 
-with open(beanfile,"r") as f:
-    beandata = json.load(f)
+    with open(beanfile,"r") as f:
+        beandata = json.load(f)
 
 
-origin_lat_beans=[]
-origin_long_beans=[]
-origin_label=[]
-agtron_beans=[]
-agtron_label=[]
-aroma_beans=[]
-aroma_label=[]
-acidity_beans=[]
-acidity_label=[]
-body_beans=[]
-body_label=[]
-aftertaste_beans=[]
-aftertaste_label=[]
-flavor_beans=[]
-flavor_label=[]
-wMilk_beans=[]
-wMilk_label=[]
+    origin_lat_beans=[]
+    origin_long_beans=[]
+    origin_label=[]
+    agtron_beans=[]
+    agtron_label=[]
+    aroma_beans=[]
+    aroma_label=[]
+    acidity_beans=[]
+    acidity_label=[]
+    body_beans=[]
+    body_label=[]
+    aftertaste_beans=[]
+    aftertaste_label=[]
+    flavor_beans=[]
+    flavor_label=[]
+    wMilk_beans=[]
+    wMilk_label=[]
 
-BEAN_DATA=[]
+    BEAN_DATA=[]
+    BEAN_LABEL=[]
 
-for i,bean in enumerate(beandata[:10]):
-    print("BEAN ",i)
-    print(bean["Name"])
-    print(bean["Review"])
-    print("Roast (normed) ", bean["Agtron"])
-    print()
+    for i,bean in enumerate(beandata[:20]):
+        print("BEAN ",i)
+        print(bean["Name"])
+        print(bean["Review"])
+        print("Roast (normed) ", bean["Agtron"])
+        print()
 
-    label = int(input("Like (1) Dislike (0)"))
-    beandata[i]["Label"] = label
+        label = int(input("Like (1) Dislike (-1)"))
+        beandata[i]["Label"] = label
 
+        bean_vector=[]
+        bean_vector.append(bean["Origin"][0])
+        bean_vector.append(bean["Origin"][1])
+        bean_vector.append(bean["Agtron"])
+        bean_vector.append(bean["Aroma"])
+        bean_vector.append(bean["Acidity"])
+        bean_vector.append(bean["Body"])
+        bean_vector.append(bean["Aftertaste"])
+        bean_vector.append(bean["Flavor"])
+        bean_vector.append(bean["WithMilk"])
+        #bean_vector.append(beandata[i]["Label"])
+        BEAN_DATA.append(bean_vector)
+        BEAN_LABEL.append(label)
+
+        if bean["Origin"] != -1:
+            origin_lat_beans.append(bean["Origin"][0])
+            origin_long_beans.append(bean["Origin"][1])
+            origin_label.append(beandata[i]["Label"])
+        if bean["Agtron"] != -1:
+            agtron_beans.append(bean["Agtron"])
+            agtron_label.append(beandata[i]["Label"])
+        if bean["Aroma"] != -1:
+            aroma_beans.append(bean["Aroma"])
+            aroma_label.append(beandata[i]["Label"])
+        if bean["Acidity"] != -1:
+            acidity_beans.append(bean["Acidity"])
+            acidity_label.append(beandata[i]["Label"])
+        if bean["Body"] != -1:
+            body_beans.append(bean["Body"])
+            body_label.append(beandata[i]["Label"])
+        if bean["Aftertaste"] != -1:
+            aftertaste_beans.append(bean["Aftertaste"])
+            aftertaste_label.append(beandata[i]["Label"])
+        if bean["Flavor"] != -1:
+            flavor_beans.append(bean["Flavor"])
+            flavor_label.append(beandata[i]["Label"])
+        if bean["WithMilk"] != -1:
+            wMilk_beans.append(bean["WithMilk"])
+            wMilk_label.append(beandata[i]["Label"])
+
+
+    '''
+    DECISION TREES
+    tree = decisive_coffee_tree([0,1,2,3])
+    #split = tree.split_beans(BEAN_DATA)
+    #print("A",split["index"]," <= ", split["value"], "Gini: ", split["gini"])
+    tree.update_node_values(tree.root,BEAN_DATA) #create the decision tree weights based on training data
+    tree.print_vals() # see the weights
+    exit()
+    '''
+    '''
+    AVL TREES
+    beandata=shuffle_beans(beandata)
+
+    for bean in beandata:
+        classify_bean(bean,coffee_trees,epsilon,USER_WEIGHT_PROFILE,USER_BIAS_PROFILE)
+
+
+    for ind, tree in enumerate(coffee_trees):
+        print("MIN:",min(tree.harvest_tree())," ROOT:",tree.harvest_tree()[0]," MAX:",max(tree.harvest_tree()))
+        print(len(tree.harvest_tree()))
+
+    '''
+    '''
+    RANDOM FOREST FEATURE SELECTION
+    #idea - use random forest where each tree is trained on a different attribute (learn how much influence each tree has)
+    #features: origin(lat), origin(long), agtron, aroma, acidity, body, aftertaste, wMilk, Flavor
+    plt.scatter(origin_lat_beans,origin_long_beans,c=origin_label)
+    plt.show()
+    '''
+
+    ## ADA BOOST attempt
+    num_clf = 9
+    boosted_beans = ADABeans(num_clf,len(BEAN_DATA))
+    thetas,alphs = boosted_beans.train_classifiers(BEAN_DATA,BEAN_LABEL)
+    print(thetas)
+    print(alphs)
+
+    bean = beandata[21]
     bean_vector=[]
     bean_vector.append(bean["Origin"][0])
     bean_vector.append(bean["Origin"][1])
@@ -387,57 +520,7 @@ for i,bean in enumerate(beandata[:10]):
     bean_vector.append(bean["Aftertaste"])
     bean_vector.append(bean["Flavor"])
     bean_vector.append(bean["WithMilk"])
-    bean_vector.append(beandata[i]["Label"])
-    BEAN_DATA.append(bean_vector)
-
-    if bean["Origin"] != -1:
-        origin_lat_beans.append(bean["Origin"][0])
-        origin_long_beans.append(bean["Origin"][1])
-        origin_label.append(beandata[i]["Label"])
-    if bean["Agtron"] != -1:
-        agtron_beans.append(bean["Agtron"])
-        agtron_label.append(beandata[i]["Label"])
-    if bean["Aroma"] != -1:
-        aroma_beans.append(bean["Aroma"])
-        aroma_label.append(beandata[i]["Label"])
-    if bean["Acidity"] != -1:
-        acidity_beans.append(bean["Acidity"])
-        acidity_label.append(beandata[i]["Label"])
-    if bean["Body"] != -1:
-        body_beans.append(bean["Body"])
-        body_label.append(beandata[i]["Label"])
-    if bean["Aftertaste"] != -1:
-        aftertaste_beans.append(bean["Aftertaste"])
-        aftertaste_label.append(beandata[i]["Label"])
-    if bean["Flavor"] != -1:
-        flavor_beans.append(bean["Flavor"])
-        flavor_label.append(beandata[i]["Label"])
-    if bean["WithMilk"] != -1:
-        wMilk_beans.append(bean["WithMilk"])
-        wMilk_label.append(beandata[i]["Label"])
-
-
-tree = decisive_coffee_tree([0,1,2,3])
-#split = tree.split_beans(BEAN_DATA)
-#print("A",split["index"]," <= ", split["value"], "Gini: ", split["gini"])
-tree.update_node_values(tree.root,BEAN_DATA) #create the decision tree weights based on training data
-tree.print_vals() # see the weights
-exit()
-
-'''
-
-beandata=shuffle_beans(beandata)
-
-for bean in beandata:
-    classify_bean(bean,coffee_trees,epsilon,USER_WEIGHT_PROFILE,USER_BIAS_PROFILE)
-
-
-for ind, tree in enumerate(coffee_trees):
-    print("MIN:",min(tree.harvest_tree())," ROOT:",tree.harvest_tree()[0]," MAX:",max(tree.harvest_tree()))
-    print(len(tree.harvest_tree()))
-
-'''
-#idea - use random forest where each tree is trained on a different attribute (learn how much influence each tree has)
-#features: origin(lat), origin(long), agtron, aroma, acidity, body, aftertaste, wMilk, Flavor
-plt.scatter(origin_lat_beans,origin_long_beans,c=origin_label)
-plt.show()
+    print(bean["Name"])
+    print(bean["Review"])
+    print("Roast (normed) ", bean["Agtron"])
+    print(boosted_beans.predict(bean_vector))
